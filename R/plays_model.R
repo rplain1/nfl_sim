@@ -3,7 +3,7 @@ library(tidyverse)
 library(brms)
 library(tidybayes)
 
-con <- dbConnect(duckdb(), "~/Projects/nfl_etl/data/luna.duckdb")
+con <- dbConnect(duckdb(), Sys.getenv("DB_PATH"))
 
 dbListTables(con)
 
