@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 .Renviron
+
+*.rds
+.DS_Store

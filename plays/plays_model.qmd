@@ -1,0 +1,81 @@
+
+```{r}
+library(tidyverse)
+library(brms)
+library(blitz)
+library(tidybayes)
+```
+
+
+```{r}
+con <- connect()
+```
+
+
+```{r}
+tblx(summary, play_counts) |>
+  filter(season >= 2021) |>
+  collect() -> df_plays_model
+
+plays_scale = scale(df_plays_model$plays)
+
+.scale = attr(plays_scale, 'scaled:scale')
+.center = attr(plays_scale, 'scaled:center')
+
+df_plays_model$plays_std <- plays_scale[, 1]
+
+plays_mod <- brm(
+  plays_std ~ 1 + (1 | passer_id) + (1 | head_coach),
+  family = gaussian(),
+  data = df_plays_model,
+  prior = c(
+    prior(normal(0, 1.5), class = Intercept),
+    prior(exponential(1), class = sigma)
+  ),
+  chains = 4,
+  cores = 4,
+  warmup = 1000,
+  iter = 3500,
+  seed = 4,
+  backend = 'cmdstan'
+)
+```
+
+
+```{r}
+plot(plays_mod)
+mcmc_plot(plays_mod)
+
+pp_check(plays_mod)
+
+summary(plays_mod)
+```
+
+### Applying the predictions
+
+
+```{r}
+df_plays_preds <- df_plays_model |>
+  filter(season >= 2024) |>
+  tidybayes::add_predicted_draws(plays_mod, seed = 527) |>
+  ungroup() |>
+  mutate(.prediction = .prediction * .scale + .center) |>
+  select(-.row, -.chain, -.iteration)
+
+# test that 75% of .predictions contain the play
+df_plays_preds |>
+  group_by(season, week, game_id, posteam, plays) |>
+  median_qi(.prediction, .width = 0.75) |>
+  mutate(
+    inner_third = between(plays, .lower, .upper)
+  ) |>
+  count(inner_third) |>
+  mutate(perc = n / sum(n))
+
+df_plays_preds |>
+    load_data(table_name = "PLAYS_PREDS", schema_name = "MODELS")
+
+
+plays_mod |> saveRDS('plays/plays_mod.rds')
+
+```
